@@ -26,4 +26,4 @@ system-wide VPN/DNS blocker and does not promise complete ad, tracker or malware
 
 ## Licence
 
-Apache-2.0 is the project decision. Add the canonical licence text to `LICENSE` before the first public release.
+MIT. See [LICENSE](LICENSE).

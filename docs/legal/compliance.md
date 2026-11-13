@@ -12,7 +12,7 @@ privacy/consumer law, site-terms or security duties; it only avoids a store subm
 
 | Control | Requirement |
 |---|---|
-| Licence | Apache-2.0 in `LICENSE`; every contribution grants compatible rights. |
+| Licence | MIT in `LICENSE`; every contribution grants compatible rights. |
 | Notices | `NOTICE` and `THIRD_PARTY_NOTICES.md` record dependencies/filter lists, versions and attributions. |
 | Privacy | `PRIVACY.md` accurately describes local data, optional rule updates and user-initiated reports. |
 | Security | `SECURITY.md`, threat model, dependency review, signed releases/updates and key rotation/revocation. |
@@ -54,7 +54,7 @@ VPN/DNS/proxy scope requires a new legal and platform review.
 
 ## Release gate
 
-- [ ] Owner has rights to license authored source Apache-2.0.
+- [ ] Owner has rights to license authored source MIT.
 - [ ] Every dependency/filter list has compatible licence, source, version and notice.
 - [ ] No Drishan data, secrets, signing material or proprietary assets are present.
 - [ ] Threat model reviewed; no remote executable-update path exists.

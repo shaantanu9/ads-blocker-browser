@@ -16,7 +16,7 @@ models, paid features or secrets are imported into this project.
 1. Make ordinary browsing cleaner without collecting browsing data.
 2. Be simple: blocking is on by default; exceptions are per site and reversible.
 3. Be transparent: show active protection and a local blocked-request count.
-4. Be auditable: public source, Apache-2.0 licence, reproducible releases, dependency notices and signed rules.
+4. Be auditable: public source, MIT licence, reproducible releases, dependency notices and signed rules.
 5. Start Android-first; do not widen into a VPN/proxy product.
 
 ## Non-goals
@@ -74,5 +74,5 @@ protection and local data deletion; the release is signed and has checksum/SBOM;
 | Platform | Android first; iOS feasibility later |
 | Traffic | Direct device-to-site, no proxy/VPN/DNS/TLS interception |
 | Business | Free, no ads, account, analytics or affiliate links |
-| Licence | Apache-2.0 |
+| Licence | MIT |
 | Rule source | Curated project-owned starter rules; external lists only after licence audit |
