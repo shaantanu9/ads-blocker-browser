@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -48,7 +49,6 @@ class _BrowserScreenState extends State<BrowserScreen> {
   bool _loading = true;
   bool _canGoBack = false;
   bool _canGoForward = false;
-  int _blocked = 0;
 
   @override
   void initState() {
@@ -87,14 +87,22 @@ class _BrowserScreenState extends State<BrowserScreen> {
     allowFileAccess: false,
     allowContentAccess: false,
     safeBrowsingEnabled: true,
-    contentBlockers: [
-      if (!allowAds)
-        for (final host in blockedHosts)
-          ContentBlocker(
-            trigger: ContentBlockerTrigger(urlFilter: hostPattern(host)),
-            action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-          ),
-    ],
+    // flutter_inappwebview classifies every Android request with a blocking
+    // HEAD request before applying ContentBlocker rules. That makes pages
+    // markedly slower. WKWebView applies these rules natively, so retain them
+    // on iOS and use the lightweight cosmetic rules on Android for now.
+    contentBlockers: Platform.isAndroid
+        ? const []
+        : [
+            if (!allowAds)
+              for (final host in blockedHosts)
+                ContentBlocker(
+                  trigger: ContentBlockerTrigger(urlFilter: hostPattern(host)),
+                  action: ContentBlockerAction(
+                    type: ContentBlockerActionType.BLOCK,
+                  ),
+                ),
+          ],
   );
 
   Uri? _toUri(String input) {
@@ -162,13 +170,9 @@ class _BrowserScreenState extends State<BrowserScreen> {
             Text(
               _adsAllowed
                   ? 'Ads are allowed for this site.'
+                  : Platform.isAndroid
+                  ? 'Cosmetic rules hide common ads without slowing every request.'
                   : 'Known ad and tracker requests are blocked.',
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.block_outlined),
-              title: Text('$_blocked requests blocked'),
-              subtitle: const Text('This page only. Nothing is sent to us.'),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -215,7 +219,6 @@ class _BrowserScreenState extends State<BrowserScreen> {
       _page = Uri.tryParse(url);
       _address.text = url;
       _loading = true;
-      _blocked = 0;
     });
   }
 
@@ -451,7 +454,6 @@ class _BrowserScreenState extends State<BrowserScreen> {
               if (mounted) {
                 setState(() {
                   _page = page;
-                  _blocked = 0;
                   _loading = true;
                   _address.text = page?.toString() ?? _address.text;
                 });
@@ -494,12 +496,6 @@ class _BrowserScreenState extends State<BrowserScreen> {
               return url != null && {'http', 'https'}.contains(url.scheme)
                   ? NavigationActionPolicy.ALLOW
                   : NavigationActionPolicy.CANCEL;
-            },
-            onLoadResource: (_, resource) {
-              final uri = Uri.tryParse(resource.url.toString());
-              if (uri != null && isBlockedHost(uri.host) && mounted) {
-                setState(() => _blocked += 1);
-              }
             },
           ),
         ),
