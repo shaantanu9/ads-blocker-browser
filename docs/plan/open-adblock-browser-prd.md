@@ -2,6 +2,10 @@
 
 Status: approved product direction, implementation not started — 2026-11-13.
 
+Implementation update — 2026-11-13: the Android MVP includes one active lightweight WebView, local tab snapshots,
+private tabs, history, bookmarks, a per-site exception and clear-data controls. Filter update signatures, hardware
+benchmarking, full multi-WebView tab preservation and iOS are not built yet.
+
 ## Product summary
 
 Open Adblock Browser is a separate, free and open-source browser. It loads a page directly on the person's device and

@@ -6,6 +6,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'ad_block.dart';
+import 'browser_data.dart';
 
 void main() => runApp(const OpenAdblockBrowser());
 
@@ -34,9 +35,14 @@ class BrowserScreen extends StatefulWidget {
 }
 
 class _BrowserScreenState extends State<BrowserScreen> {
-  static const _allowedSitesKey = 'allowed_sites_v1';
   final _address = TextEditingController(text: 'https://example.com');
+  final _tabs = <BrowserTab>[
+    const BrowserTab(id: 'first', url: 'https://example.com'),
+  ];
   final _allowedSites = <String>{};
+  final _bookmarks = <String>{};
+  BrowserData? _data;
+  String _activeTabId = 'first';
   InAppWebViewController? _web;
   Uri? _page;
   bool _loading = true;
@@ -47,7 +53,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
   @override
   void initState() {
     super.initState();
-    unawaited(_loadAllowedSites());
+    unawaited(_loadData());
   }
 
   @override
@@ -56,14 +62,17 @@ class _BrowserScreenState extends State<BrowserScreen> {
     super.dispose();
   }
 
-  Future<void> _loadAllowedSites() async {
+  BrowserTab get _activeTab =>
+      _tabs.firstWhere((tab) => tab.id == _activeTabId);
+
+  Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
+    _data = BrowserData(prefs);
     if (mounted) {
-      setState(
-        () => _allowedSites.addAll(
-          prefs.getStringList(_allowedSitesKey) ?? const [],
-        ),
-      );
+      setState(() {
+        _allowedSites.addAll(_data!.allowedSites());
+        _bookmarks.addAll(_data!.bookmarks());
+      });
     }
   }
 
@@ -127,8 +136,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
         _allowedSites.remove(host);
       }
     });
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_allowedSitesKey, _allowedSites.toList()..sort());
+    await _data?.setAllowedSites(_allowedSites);
     await _web?.setSettings(settings: _settings(allowed));
     if (allowed) {
       await _web?.evaluateJavascript(source: showAdsScript);
@@ -182,6 +190,191 @@ class _BrowserScreenState extends State<BrowserScreen> {
     );
   }
 
+  Future<void> _toggleBookmark() async {
+    final url = _page?.toString();
+    if (url == null) return;
+    setState(() {
+      if (_bookmarks.contains(url)) {
+        _bookmarks.remove(url);
+      } else {
+        _bookmarks.add(url);
+      }
+    });
+    await _data?.setBookmarks(_bookmarks);
+  }
+
+  void _newTab({bool private = false, String url = 'https://example.com'}) {
+    final tab = BrowserTab(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      url: url,
+      isPrivate: private,
+    );
+    setState(() {
+      _tabs.add(tab);
+      _activeTabId = tab.id;
+      _page = Uri.tryParse(url);
+      _address.text = url;
+      _loading = true;
+      _blocked = 0;
+    });
+  }
+
+  void _openTabs() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            for (final tab in _tabs)
+              ListTile(
+                leading: Icon(
+                  tab.isPrivate
+                      ? Icons.visibility_off_outlined
+                      : Icons.language,
+                ),
+                title: Text(tab.title),
+                subtitle: Text(
+                  tab.url,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                selected: tab.id == _activeTabId,
+                trailing: _tabs.length == 1
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close),
+                        tooltip: 'Close tab',
+                        onPressed: () {
+                          setState(() {
+                            _tabs.remove(tab);
+                            _activeTabId = _tabs.last.id;
+                            _address.text = _tabs.last.url;
+                            _page = Uri.tryParse(_tabs.last.url);
+                          });
+                          Navigator.pop(sheetContext);
+                        },
+                      ),
+                onTap: () {
+                  setState(() {
+                    _activeTabId = tab.id;
+                    _address.text = tab.url;
+                    _page = Uri.tryParse(tab.url);
+                  });
+                  Navigator.pop(sheetContext);
+                },
+              ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.add),
+              title: const Text('New tab'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _newTab();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.visibility_off_outlined),
+              title: const Text('New private tab'),
+              subtitle: const Text('Does not save history'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _newTab(private: true);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openSaved() {
+    final history = _data?.history() ?? const <HistoryEntry>[];
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => DefaultTabController(
+        length: 2,
+        child: SizedBox(
+          height: 420,
+          child: Column(
+            children: [
+              const TabBar(
+                tabs: [
+                  Tab(text: 'Bookmarks'),
+                  Tab(text: 'History'),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _savedList(
+                      _bookmarks
+                          .map(
+                            (url) => HistoryEntry(
+                              url: url,
+                              title: Uri.tryParse(url)?.host ?? url,
+                              visitedAt: DateTime.now(),
+                            ),
+                          )
+                          .toList(),
+                      sheetContext,
+                      empty: 'No bookmarks yet.',
+                    ),
+                    _savedList(
+                      history,
+                      sheetContext,
+                      empty: 'No saved history yet.',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _savedList(
+    List<HistoryEntry> entries,
+    BuildContext sheetContext, {
+    required String empty,
+  }) => entries.isEmpty
+      ? Center(child: Text(empty))
+      : ListView.builder(
+          itemCount: entries.length,
+          itemBuilder: (_, index) {
+            final entry = entries[index];
+            return ListTile(
+              title: Text(entry.title),
+              subtitle: Text(
+                entry.url,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _newTab(url: entry.url);
+              },
+            );
+          },
+        );
+
+  Future<void> _clearData() async {
+    await _data?.clearLocalRecords();
+    await CookieManager.instance().deleteAllCookies();
+    await WebStorageManager.instance().deleteAllData();
+    await InAppWebViewController.clearAllCache();
+    if (mounted) {
+      setState(() {
+        _allowedSites.clear();
+        _bookmarks.clear();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
@@ -206,12 +399,37 @@ class _BrowserScreenState extends State<BrowserScreen> {
           ),
         ),
       ),
+      actions: [
+        IconButton(
+          onPressed: _toggleBookmark,
+          tooltip: 'Bookmark page',
+          icon: Icon(
+            _bookmarks.contains(_page?.toString())
+                ? Icons.star
+                : Icons.star_border,
+          ),
+        ),
+        PopupMenuButton<String>(
+          onSelected: (value) async {
+            if (value == 'saved') _openSaved();
+            if (value == 'clear') await _clearData();
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'saved', child: Text('Bookmarks and history')),
+            PopupMenuItem(
+              value: 'clear',
+              child: Text('Clear local browsing data'),
+            ),
+          ],
+        ),
+      ],
     ),
     body: Column(
       children: [
         if (_loading) const LinearProgressIndicator(),
         Expanded(
           child: InAppWebView(
+            key: ValueKey(_activeTabId),
             initialUrlRequest: URLRequest(url: WebUri('https://example.com')),
             initialSettings: _settings(false),
             initialUserScripts: UnmodifiableListView([
@@ -240,8 +458,33 @@ class _BrowserScreenState extends State<BrowserScreen> {
               }
             },
             onLoadStop: (controller, url) async {
+              final urlText = url?.toString() ?? _activeTab.url;
+              final title =
+                  await controller.getTitle() ??
+                  Uri.tryParse(urlText)?.host ??
+                  urlText;
+              if (!_activeTab.isPrivate) {
+                await _data?.record(
+                  HistoryEntry(
+                    url: urlText,
+                    title: title,
+                    visitedAt: DateTime.now(),
+                  ),
+                );
+              }
               if (mounted) {
-                setState(() => _loading = false);
+                setState(() {
+                  _loading = false;
+                  final index = _tabs.indexWhere(
+                    (tab) => tab.id == _activeTabId,
+                  );
+                  if (index >= 0) {
+                    _tabs[index] = _tabs[index].copyWith(
+                      url: urlText,
+                      title: title,
+                    );
+                  }
+                });
               }
               await _refreshNavigation();
             },
@@ -272,6 +515,19 @@ class _BrowserScreenState extends State<BrowserScreen> {
               onPressed: _canGoBack ? () => _web?.goBack() : null,
               tooltip: 'Back',
               icon: const Icon(Icons.arrow_back),
+            ),
+            IconButton(
+              onPressed: _openTabs,
+              tooltip: 'Tabs',
+              icon: Badge(
+                label: Text('${_tabs.length}'),
+                child: const Icon(Icons.tab),
+              ),
+            ),
+            IconButton(
+              onPressed: _openSaved,
+              tooltip: 'Bookmarks and history',
+              icon: const Icon(Icons.bookmarks_outlined),
             ),
             IconButton(
               onPressed: _canGoForward ? () => _web?.goForward() : null,
